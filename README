@@ -1,0 +1,7 @@
+The Boatlooder project aims at being a workaround for the Lego NXT rom
+flashing limitations. It's composed of a NXT resident software based on
+NxOS and the correspnding loading software.
+
+How to contact the author:
+    Giovanni Simoni     <simgidacav@gmail.com>
+
