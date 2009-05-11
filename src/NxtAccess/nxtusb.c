@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <unistd.h>
 #include <libusb-1.0/libusb.h>
 
 /* Lego NXT keys, used by NxOS as well */
@@ -22,12 +23,12 @@ static const uint8_t esc = 0x1b;
 static const uint8_t eot = 0x04;
 
 /* Nxt buffer size */
-static const uint32_t usb_buflen = 5;
+static const uint32_t usb_buflen = 64;
 
 struct nxtusb {
-    struct libusb_context *context;
-    struct libusb_device_handle *handle;
-    uint8_t *buffer;
+    struct libusb_context *context;         /* LibUSB Context */
+    struct libusb_device_handle *handle;    /* Nxt handle */
+    uint8_t *buffer;                        /* Byte stuffing buffer */
 };
 
 static const char *errmsg[] = {
@@ -42,6 +43,7 @@ const char *nxtusb_geterr(nxterr_t e)
     return errmsg[e];
 }
 
+/* Short for libusb_bulk_transfer */
 static inline int send_raw(struct libusb_device_handle *handle,
                            uint8_t *buffer, size_t len, int *transf)
 {
@@ -49,17 +51,26 @@ static inline int send_raw(struct libusb_device_handle *handle,
                                 tx_timeout);
 }
 
-static inline void chunk(struct libusb_device_handle *handle,
-                         uint8_t *buffer, size_t *fill)
+/* After putting a byte into the buffer, we need to check if the buffer is
+ * full.
+ * returns the libusb return value for transmission.
+ */
+static int chunk(struct libusb_device_handle *handle, uint8_t *buffer,
+                 size_t *fill)
 {
     size_t f;
     int32_t t;
+    int ret;
 
     f = *fill;
-    if (f % usb_buflen == 0 && f != 0) {
-        send_raw(handle, buffer, f, &t);
+    if ((f % usb_buflen) == 0 && f != 0) {
+        /* The buffer must be flushed */
+        if ((ret = send_raw(handle, buffer, f, &t)) != 0) {
+            return ret;
+        }
         *fill = 0;
     }
+    return 0;
 }
 
 nxterr_t nxtusb_send(nxtusb_t nxt, void *buffer, size_t len,
@@ -69,22 +80,33 @@ nxterr_t nxtusb_send(nxtusb_t nxt, void *buffer, size_t len,
     int32_t t;
     uint8_t *out, val;
     struct libusb_device_handle *handle;
+    int ret;
+
+    assert(nxt != NULL);
 
     out = nxt->buffer;
     handle = nxt->handle;
-
+    printf("Sending %d bytes\n", len);
     for (i = 0, j = 0; i < len; i++) {
         val = ((uint8_t *)buffer)[i];
         if (val == esc || val == eot) {
+            printf("esc %02x\n", val);
             out[j++] = esc;
-            chunk(handle, out, &j);
+            if ((ret = chunk(handle, out, &j)) != 0) {
+                goto fail;
+            }
         }
         out[j++] = val;
-        chunk(handle, out, &j);
+        if ((ret = chunk(handle, out, &j)) != 0) {
+            goto fail;
+        }
     }
     out[j++] = eot;
-    send_raw(handle, out, j, &t);
-    return NXERR_SUCCESS;
+    if ((ret = send_raw(handle, out, j, &t)) == 0)
+        return NXERR_SUCCESS;
+  fail:
+    *libusb_err = ret;
+    return NXERR_LIBUSB;
 }
 
 nxterr_t nxtusb_new(nxtusb_t *nxt, int *libusb_err)
@@ -128,6 +150,7 @@ nxterr_t nxtusb_new(nxtusb_t *nxt, int *libusb_err)
   fail1:
     libusb_exit(ret->context);
   fail0:
+    free(ret->buffer);
     free(ret);
     *nxt = NULL;
     return err;

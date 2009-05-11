@@ -3,7 +3,7 @@
 CFLAGS := -Wall -D_GNU_SOURCE
 LDFLAGS := -lusb-1.0 -lefence
 OBJS := $(addsuffix .o, $(basename $(wildcard */*.c *.c)))
-APP := test
+APP := boatlooder
 
 all: $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $(APP)
