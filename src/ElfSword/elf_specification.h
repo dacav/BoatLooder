@@ -244,4 +244,47 @@ enum {
                                         /* processor specific type */
 };
 
+/* -------------------------------------------------------------------- */
+/* Program header                                                       */
+/* -------------------------------------------------------------------- */
+
+typedef struct {
+    Elf32_Word      p_type;             /* Type of segment */
+    Elf32_Off       p_offset;           /* Offset from the file's
+                                         * beginning of the first byte of
+                                         * the segment */
+    Elf32_Addr      p_vaddr;            /* Virtual address of the first
+                                         * byte */
+    Elf32_Addr      p_paddr;            /* Reserved for phisical address */
+    Elf32_Word      p_filesz;           /* Size of the segment's file image */
+    Elf32_Word      p_memsz;            /* Size of the segment's memory
+                                         * image */
+    Elf32_Word      p_flags;            /* Segment flags */
+    Elf32_Word      p_align;            /* Segment alignment */
+} Elf32_Phdr;
+
+/* p_type field values */
+enum {
+    PT_NULL = 0,                        /* Array element unused */
+    PT_LOAD = 1,                        /* Loadable segment */
+    PT_DYNAMIC = 2,                     /* Element specifying dynamic
+                                         * linking info */
+    PT_INTERP = 3,                      /* Null terminated path of
+                                         * interpreter */
+    PT_NOTE = 4,                        /* Auxiliary information */
+    PT_SHLIB = 5,                       /* Reserved */
+    PT_PHDR = 6,                        /* Location/size of the program
+                                         * header itself */
+    PT_LOPROC = 0x70000000,             /* Processor specific reserved */
+    PT_HIPROC = 0x7fffffff              /* Processor specific reserved */
+};
+
+/* p_flags filed values */
+enum {
+    PF_X = 0x01,                        /* Execute permission */
+    PF_W = 0x02,                        /* Write permission */
+    PF_R = 0x04,                        /* Read permission */
+    PF_MASKPROC = 0xf0000000            /* Mask for processor specific */
+};
+
 #endif /* __ELF_SPECIFICATION_H__ */

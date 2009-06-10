@@ -47,7 +47,7 @@ struct elf_struct {
     struct hsearch_data namtab; /* Hash optimzier for names */
 };
 
-const char *elf_symbol_name(elf_t elf, Elf32_Shdr *shdr, Elf32_Sym *yhdr)
+const char *elf_symbol_name(Elf elf, Elf32_Shdr *shdr, Elf32_Sym *yhdr)
 {
     const Elf32_Word sh_type = shdr->sh_type;
     const Elf32_Ehdr *header = elf->file.header;
@@ -64,14 +64,16 @@ const char *elf_symbol_name(elf_t elf, Elf32_Shdr *shdr, Elf32_Sym *yhdr)
     return (const char *)elf->file.data + shdr->sh_offset + yhdr->st_name;
 }
 
-void elf_section_content (elf_t elf, Elf32_Shdr *shdr,
+void elf_section_content (Elf elf, Elf32_Shdr *shdr,
                           void **cont, size_t *size)
 {
-    *cont = (void *)(elf->file.data8b + shdr->sh_offset);
-    *size = shdr->sh_size;
+    if (cont != NULL)
+        *cont = (void *)(elf->file.data8b + shdr->sh_offset);
+    if (size != NULL)
+        *size = shdr->sh_size;
 }
 
-const char *elf_section_name(elf_t elf, Elf32_Shdr *shdr)
+const char *elf_section_name(Elf elf, Elf32_Shdr *shdr)
 {
     const Elf32_Shdr *names = elf->names;
 
@@ -83,7 +85,7 @@ const char *elf_section_name(elf_t elf, Elf32_Shdr *shdr)
     }
 }
 
-void elf_symbols_scan(elf_t elf, Elf32_Shdr *shdr, sym_scan_t callback,
+void elf_symbols_scan(Elf elf, Elf32_Shdr *shdr, SymScan callback,
                       void *udata)
 {
     const Elf32_Word sh_type = shdr->sh_type;
@@ -102,7 +104,7 @@ void elf_symbols_scan(elf_t elf, Elf32_Shdr *shdr, sym_scan_t callback,
     }
 }
 
-void elf_sections_scan(elf_t elf, sec_scan_t callback, void *udata)
+void elf_sections_scan(Elf elf, SecScan callback, void *udata)
 {
     Elf32_Ehdr *header;
     Elf32_Shdr *cursor;
@@ -122,7 +124,7 @@ void elf_sections_scan(elf_t elf, sec_scan_t callback, void *udata)
 }
 
 static
-bool check_magic(elf_t elf)
+bool check_magic(Elf elf)
 {
     unsigned char *magic;
 
@@ -133,7 +135,7 @@ bool check_magic(elf_t elf)
            magic[EI_MAG3] == ELFMAG3;
 }
 
-bool elf_release_file(elf_t elf)
+bool elf_release_file(Elf elf)
 {
     int ret;
 
@@ -149,7 +151,7 @@ bool elf_release_file(elf_t elf)
 }
 
 static
-bool hash_builder(void *udata, elf_t elf, Elf32_Shdr *shdr)
+bool hash_builder(void *udata, Elf elf, Elf32_Shdr *shdr)
 {
     struct hsearch_data *namtab;
     ENTRY e, *ret;
@@ -162,13 +164,13 @@ bool hash_builder(void *udata, elf_t elf, Elf32_Shdr *shdr)
     return true;
 }
 
-elf_t elf_map_file(const char *filename)
+Elf elf_map_file(const char *filename)
 {
     int fd;
     struct stat buf;
     size_t len;
     uint8_t *secarray;
-    elf_t elf;
+    Elf elf;
     Elf32_Ehdr *header;
     struct hsearch_data *namtab;
 
@@ -209,7 +211,6 @@ elf_t elf_map_file(const char *filename)
 
   fail2:
     munmap(elf->file.data, elf->len);
-    close(elf->fd);
   fail1:
     close(fd);
   fail0:
@@ -217,7 +218,12 @@ elf_t elf_map_file(const char *filename)
     return NULL;
 }
 
-Elf32_Shdr *elf_section_get(elf_t elf, const char *secname)
+const uint8_t * elf_get_content(Elf elf)
+{
+    return elf->file.data8b;
+}
+
+Elf32_Shdr *elf_section_get(Elf elf, const char *secname)
 {
     ENTRY key = {
         .key = (char *)secname,
@@ -228,5 +234,27 @@ Elf32_Shdr *elf_section_get(elf_t elf, const char *secname)
     return hsearch_r(key, FIND, &entry, &elf->namtab) == 0
            ? NULL
            : (Elf32_Shdr *) entry->data;
+}
+
+
+bool elf_progheader_scan(Elf elf, PHeaderScan callback, void *udata)
+{
+    size_t nents, size;
+    Elf32_Ehdr *header;
+    Elf32_Phdr *cursor;
+
+    header = elf->file.header;
+    nents = header->e_phnum;
+    if (nents == 0)
+        return false;
+    size = header->e_phentsize;
+    cursor = (Elf32_Phdr *)(elf->file.data8b + header->e_phoff);
+    while (nents--) {
+        if (!callback(udata, elf, cursor))
+            break;
+        cursor = (Elf32_Phdr *)((uint8_t *)cursor + size);
+    }
+
+    return true;
 }
 
