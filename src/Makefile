@@ -1,9 +1,13 @@
 .PHONY : all clean
 
 CFLAGS := -Wall -D_GNU_SOURCE
-LDFLAGS := -lusb-1.0 -lefence
+LDFLAGS := -lusb-1.0 #-lefence
 OBJS := $(addsuffix .o, $(basename $(wildcard */*.c *.c)))
 APP := boatlooder
+
+ifdef DUMMY
+    CFLAGS += -DDUMMY
+endif
 
 all: $(OBJS)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJS) -o $(APP)

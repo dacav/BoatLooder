@@ -47,8 +47,21 @@ const char *nxtusb_geterr(nxterr_t e)
 static inline int send_raw(struct libusb_device_handle *handle,
                            uint8_t *buffer, size_t len, int *transf)
 {
+    #ifdef DUMMY
+
+    int i;
+
+    for (i = 0; i < len; i++)
+        printf("0x%02x%c", buffer[i], (i & 3) == 3 && i ? '\n' : ' ');
+    putchar(10);
+    return 0;
+
+    #else
+
     return libusb_bulk_transfer(handle, tx_endpoint, buffer, len, transf,
                                 tx_timeout);
+
+    #endif
 }
 
 /* After putting a byte into the buffer, we need to check if the buffer is
@@ -73,8 +86,29 @@ static int chunk(struct libusb_device_handle *handle, uint8_t *buffer,
     return 0;
 }
 
-nxterr_t nxtusb_send(nxtusb_t nxt, void *buffer, size_t len,
+nxterr_t nxtusb_send(nxtusb_t nxt, void *buffer, ssize_t len,
                      int *libusb_err)
+{
+    uint8_t *out;
+    int transf;
+
+    assert(nxt != NULL);
+    out = (uint8_t *)buffer;
+
+    while (len > 0) {
+        if ((*libusb_err = send_raw(nxt->handle, buffer,
+                                    usb_buflen < len ? usb_buflen : len,
+                                    &transf)) != 0)
+            return NXERR_LIBUSB;
+        len -= transf;
+        buffer += transf;
+    }
+
+    return NXERR_SUCCESS;
+}
+
+nxterr_t nxtusb_send_escaped(nxtusb_t nxt, void *buffer, size_t len,
+                             int *libusb_err)
 {
     uint32_t i, j;
     int32_t t;
@@ -112,13 +146,19 @@ nxterr_t nxtusb_send(nxtusb_t nxt, void *buffer, size_t len,
 nxterr_t nxtusb_new(nxtusb_t *nxt, int *libusb_err)
 {
     nxtusb_t ret;
+
+    #ifndef DUMMY
     int err;
+    #endif
+
     libusb_device_handle *handle;
 
     ret = malloc(sizeof(struct nxtusb));
     assert(ret != NULL);
     ret->buffer = malloc(sizeof(uint8_t) * usb_buflen);
     assert(ret->buffer != NULL);
+
+    #ifndef DUMMY 
 
     if ((err = libusb_init(&ret->context)) != 0) {
         *libusb_err = err;
@@ -143,9 +183,14 @@ nxterr_t nxtusb_new(nxtusb_t *nxt, int *libusb_err)
         }
         goto fail1;
     }
+
+    #endif
+
     ret->handle = handle;
     *nxt = ret;
     return NXERR_SUCCESS;
+
+    #ifndef DUMMY
 
   fail1:
     libusb_exit(ret->context);
@@ -154,14 +199,22 @@ nxterr_t nxtusb_new(nxtusb_t *nxt, int *libusb_err)
     free(ret);
     *nxt = NULL;
     return err;
+
+    #endif
 }
 
 void nxtusb_free(nxtusb_t u)
 {
     if (u == NULL)
         return;
+
+    #ifndef DUMMY
+
     libusb_close(u->handle);
     libusb_exit(u->context);
+
+    #endif
+
     free(u->buffer);
     free(u);
 }
