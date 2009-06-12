@@ -57,13 +57,10 @@ const uint8_t * elf_get_content(Elf elf);
  * Retrieves a section by searching the given name on the sections hash
  * table
  *
- * @note The hash table is part of the Elf structure: its content is
- *       mapped by elf_map_file
- *
  * @param elf The Elf object;
  * @param secname The name of the section;
  * @return A pointer to the section header or NULL if there's no such
- *         section
+ *         section.
  */
 Elf32_Shdr * elf_section_get(Elf elf, const char *secname);
 
@@ -134,7 +131,7 @@ void elf_sections_scan(Elf elf, SecScan callback, void *udata);
  * @return If false the iteration will be stopped.
  */
 typedef bool (*SymScan)(void *udata, Elf elf, Elf32_Shdr *shdr,
-                           Elf32_Sym *yhdr);
+                        Elf32_Sym *yhdr);
 
 /** Scans through a section's symbols
  *
@@ -151,11 +148,23 @@ typedef bool (*SymScan)(void *udata, Elf elf, Elf32_Shdr *shdr,
 void elf_symbols_scan(Elf elf, Elf32_Shdr *shdr, SymScan callback,
                       void *udata);
 
+/** Symbol getter
+ *
+ * Retrieves a symbol by searching the given name
+ *
+ * @param elf The Elf object;
+ * @param symname The name of the symbol;
+ * @return A pointer to the symbol header or NULL if there's no such
+ *         symbol.
+ */
+
+Elf32_Sym *elf_symbol_get(Elf elf, const char *symname);
+
 /** Iteration function for program header's entry scanning
  *
  * @param udata User data;
  * @param elf The Elf object;
- * @param phdr The program header entry
+ * @param phdr The program header entry;
  * @return If false the iteration will be stopped.
  */
 typedef bool (*PHeaderScan)(void *udata, Elf elf, Elf32_Phdr *phdr);
@@ -167,9 +176,9 @@ typedef bool (*PHeaderScan)(void *udata, Elf elf, Elf32_Phdr *phdr);
  *
  * @param elf The Elf object;
  * @param callback The callback to be called;
- * @param udata User data for the callback.
+ * @param udata User data for the callback;
  * @return false if the ELF file doesn't have a program header, true
- *         oterwise
+ *         oterwise.
  */
 bool elf_progheader_scan(Elf elf, PHeaderScan callback, void *udata);
 

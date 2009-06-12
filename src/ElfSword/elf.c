@@ -44,7 +44,33 @@ struct elf_struct {
 
     /* Auxiliary data */
     Elf32_Shdr *names;          /* Section for name resolving */
-    struct hsearch_data namtab; /* Hash optimzier for names */
+    struct hsearch_data sectab; /* Hash optimzier for sections */
+    struct hsearch_data symtab; /* Hash optimzier for symbols */
+
+    int symtab_magic;           /* Magic counter for symbol table: */
+
+    /*
+       ON MAGIC COUNTER:
+
+       While building the stdlib hash tables, it's necessary to provide
+       the size of the hash. If the hash table is overflowing there's no
+       way to put another element in.
+
+       The hash table is constructed in three steps:
+
+       - The first time "elf_section_get" is called, a complete scan is
+         performed, and while searching the algorithm will count the
+         number of registred symbols. This number, multiplied by -1, is
+         registred into the symtab_magic field of this structure;
+
+       - On the second search, since the number of symbols is known, the
+         search function builds the hash table. Since the number of
+         symbols is still negative the algorithm will scan all symbols and
+         store the names into the structure;
+
+       - From the third search on the hash table is used.
+
+     */
 };
 
 const char *elf_symbol_name(Elf elf, Elf32_Shdr *shdr, Elf32_Sym *yhdr)
@@ -142,7 +168,9 @@ bool elf_release_file(Elf elf)
     if (elf != NULL) {
         ret  = munmap(elf->file.data, elf->len);
         ret += close(elf->fd);
-        hdestroy_r(&elf->namtab);
+        hdestroy_r(&elf->sectab);
+        if (elf->symtab_magic > 0)
+            hdestroy_r(&elf->symtab);
         free(elf);
         return ret >= 0;
     } else {
@@ -153,13 +181,13 @@ bool elf_release_file(Elf elf)
 static
 bool hash_builder(void *udata, Elf elf, Elf32_Shdr *shdr)
 {
-    struct hsearch_data *namtab;
+    struct hsearch_data *sectab;
     ENTRY e, *ret;
 
-    namtab = (struct hsearch_data *)udata;
+    sectab = (struct hsearch_data *)udata;
     e.key = (char *)elf_section_name(elf, shdr);
     e.data = (void *)shdr;
-    assert(hsearch_r(e, ENTER, &ret, namtab) != 0);
+    assert(hsearch_r(e, ENTER, &ret, sectab) != 0);
 
     return true;
 }
@@ -172,7 +200,7 @@ Elf elf_map_file(const char *filename)
     uint8_t *secarray;
     Elf elf;
     Elf32_Ehdr *header;
-    struct hsearch_data *namtab;
+    struct hsearch_data *sectab;
 
     /* Control structure allocation */
     elf = malloc(sizeof(struct elf_struct));
@@ -202,10 +230,13 @@ Elf elf_map_file(const char *filename)
         elf->names = (Elf32_Shdr *) (secarray + header->e_shstrndx * len);
 
     /* Hash for name optimizations */
-    namtab = &elf->namtab;
-    memset(namtab, 0, sizeof(struct hsearch_data));
-    assert(hcreate_r(len, namtab));
-    elf_sections_scan(elf, hash_builder, (void *)namtab);
+    sectab = &elf->sectab;
+    memset(sectab, 0, sizeof(struct hsearch_data));
+    assert(hcreate_r(len, sectab));
+    elf_sections_scan(elf, hash_builder, (void *)sectab);
+
+    /* Setting sections magic index */
+    elf->symtab_magic = 0;
     
     return elf;
 
@@ -231,7 +262,7 @@ Elf32_Shdr *elf_section_get(Elf elf, const char *secname)
     };
     ENTRY *entry;
 
-    return hsearch_r(key, FIND, &entry, &elf->namtab) == 0
+    return hsearch_r(key, FIND, &entry, &elf->sectab) == 0
            ? NULL
            : (Elf32_Shdr *) entry->data;
 }
@@ -256,5 +287,75 @@ bool elf_progheader_scan(Elf elf, PHeaderScan callback, void *udata)
     }
 
     return true;
+}
+
+struct track {
+    Elf32_Sym *ret;
+    int oldmagic;
+    const char *name;
+};
+
+static
+bool sym_scanner(void *udata, Elf elf, Elf32_Shdr *shdr,
+                 Elf32_Sym *yhdr)
+{
+    struct track *t;
+    const char *sym_name;
+    ENTRY e, *ret;
+
+    t = (struct track *)udata;
+
+    /* sym_name may be null if the symbol has no name */
+    if ((sym_name = elf_symbol_name(elf, shdr, yhdr)) != NULL) {
+        if (strcmp(t->name, sym_name) == 0) {
+            /* We found the searched symbol */
+            t->ret = yhdr;
+        }
+        if (t->oldmagic == 0) {
+            /* We are still counting elements */
+            elf->symtab_magic ++;
+        } else {
+            /* We are filling the table with symbol names */
+            e.key = (char *)sym_name;third
+            e.data = (void *)yhdr;
+            assert(hsearch_r(e, ENTER, &ret, &elf->symtab));
+        }
+    }
+    return true;
+}
+
+Elf32_Sym *elf_symbol_get(Elf elf, const char *name)
+{
+    Elf32_Shdr *symtab;
+    struct hsearch_data *htab;
+    ENTRY key, *entry;
+    struct track t;
+
+    symtab = elf_section_get(elf, ".symtab");
+    if (symtab == NULL)
+        return NULL;
+
+    t.oldmagic = elf->symtab_magic;
+    if (t.oldmagic <= 0) {
+        if (t.oldmagic != 0) {
+            /* We know the number of elements; building hash table */
+            htab = &elf->symtab;
+            memset(htab, 0, sizeof(struct hsearch_data));
+            assert(hcreate_r(-t.oldmagic, htab));
+        }
+        t.name = name;
+        t.ret = NULL;
+        elf_symbols_scan(elf, symtab, sym_scanner, (void *)&t);
+        elf->symtab_magic *= -1;
+        return t.ret;
+    } else {
+        /* Elements are already stored into the hash table, so we can use
+         * it */
+        key.key = (char *)name;
+        key.data = NULL;
+        return hsearch_r(key, FIND, &entry, &elf->symtab) == 0
+               ? NULL
+               : (Elf32_Sym *) entry->data;
+    }
 }
 
