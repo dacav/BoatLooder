@@ -279,12 +279,56 @@ enum {
     PT_HIPROC = 0x7fffffff              /* Processor specific reserved */
 };
 
-/* p_flags filed values */
+/* p_flags field values */
 enum {
     PF_X = 0x01,                        /* Execute permission */
     PF_W = 0x02,                        /* Write permission */
     PF_R = 0x04,                        /* Read permission */
     PF_MASKPROC = 0xf0000000            /* Mask for processor specific */
+};
+
+/* -------------------------------------------------------------------- */
+/* Program header                                                       */
+/* -------------------------------------------------------------------- */
+
+typedef struct {
+    Elf32_Sword d_tag;                  /* Interpretation controller */
+    union {
+        Elf32_Word d_val;               /* Integer representation */
+        Elf32_Addr d_ptr;               /* Pointer representation */
+    } d_un;
+} Elf32_Dyn;
+
+/* d_tag field values */
+enum {
+    DT_NULL = 0,                        /* End of dynamic array; Ignore
+                                         * d_un */
+    DT_NEEDED = 1,                      /* Use d_val */
+    DT_PLTRELSZ = 2,                    /* Use d_val */
+    DT_PLTGOT = 3,                      /* Use d_ptr */
+    DT_HASH = 4,                        /* Use d_ptr */
+    DT_STRTAB = 5,                      /* Use d_ptr */
+    DT_SYMTAB = 6,                      /* Use d_ptr */
+    DT_RELA = 7,                        /* Use d_ptr */
+    DT_RELASZ = 8,                      /* Use d_val */
+    DT_RELAENT = 9,                     /* Use d_val */
+    DT_STRSZ = 10,                      /* Use d_val */
+    DT_SYMENT = 11,                     /* Use d_val */
+    DT_INIT = 12,                       /* Use d_ptr */
+    DT_FINI = 13,                       /* Use d_ptr */
+    DT_SONAME = 14,                     /* Use d_val */
+    DT_RPATH = 15,                      /* Use d_val */
+    DT_SYMBOLIC = 16,                   /* Ignore d_un */
+    DT_REL = 17,                        /* Use d_ptr */
+    DT_RELSZ = 18,                      /* Use d_val */
+    DT_RELENT = 19,                     /* Use d_val */
+    DT_PLTREL = 20,                     /* Use d_val */
+    DT_DEBUG = 21,                      /* Use d_ptr */
+    DT_TEXTREL = 22,                    /* Ignore d_un */
+    DT_JMPREL = 23,                     /* Use d_ptr */
+    DT_BIND_NOW = 24,                   /* Ignore d_un */
+    DT_LOPROC = 0x70000000,             /* Use d_val */
+    DT_HIPROC = 0x7fffffff              /* Use d_val */
 };
 
 #endif /* __ELF_SPECIFICATION_H__ */

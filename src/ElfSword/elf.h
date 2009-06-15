@@ -119,8 +119,10 @@ typedef bool (*SecScan)(void *udata, Elf elf, Elf32_Shdr *shdr);
  * @param elf The Elf object;
  * @param callback The callback to be called;
  * @param udata User data for the callback.
+ * @return true if the scan has been completed, false if it has been
+ *         interrupted by the callback.
  */
-void elf_sections_scan(Elf elf, SecScan callback, void *udata);
+bool elf_sections_scan(Elf elf, SecScan callback, void *udata);
 
 /** Iteration function for section's symbols scanning
  *
@@ -144,8 +146,11 @@ typedef bool (*SymScan)(void *udata, Elf elf, Elf32_Shdr *shdr,
  * @param shdr The section header;
  * @param callback The callback to be called;
  * @param udata User data for the callback.
+ * @return false if the callback interrupted the scan operation or if the
+ *         ELF file doesn't have SHT_SYMTAB or SHT_DYNSYM sections, true
+ *         if the scan has been completed.
  */
-void elf_symbols_scan(Elf elf, Elf32_Shdr *shdr, SymScan callback,
+bool elf_symbols_scan(Elf elf, Elf32_Shdr *shdr, SymScan callback,
                       void *udata);
 
 /** Symbol getter
@@ -177,9 +182,17 @@ typedef bool (*PHeaderScan)(void *udata, Elf elf, Elf32_Phdr *phdr);
  * @param elf The Elf object;
  * @param callback The callback to be called;
  * @param udata User data for the callback;
- * @return false if the ELF file doesn't have a program header, true
- *         oterwise.
+ * @return false if the callback interrupted the scan operation or if the
+ *         ELF file doesn't have a program header, true if the scan has
+ *         been completed.
  */
 bool elf_progheader_scan(Elf elf, PHeaderScan callback, void *udata);
+
+/** Checks wether the ELF file is well formed
+ *
+ * @param elf The Elf object;
+ * @return true if the object is well formed, false otherwise.
+ */
+bool elf_check_format(Elf elf);
 
 #endif /* __ELF_H__ */
